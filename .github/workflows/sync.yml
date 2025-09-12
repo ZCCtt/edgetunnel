@@ -10,11 +10,11 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
-    - name: Checkout current repository
+    - name: Checkout current repository (main branch)
       uses: actions/checkout@v4
       with:
         ref: main
-        fetch-depth: 0 # 获取完整历史记录
+        fetch-depth: 0
         token: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Setup Git
@@ -29,35 +29,39 @@ jobs:
         # 添加上游仓库
         git remote add upstream https://github.com/cmliu/edgetunnel.git
         
-    - name: Fetch upstream repository
+    - name: Fetch upstream repository (beta branch)
       run: |
-        git fetch upstream
-        echo "上游分支列表:"
-        git branch -r | grep upstream
-        echo "尝试查看上游beta分支内容:"
-        git ls-tree -r upstream/beta --name-only | head -10 || echo "无法列出beta分支内容"
+        git fetch upstream beta
+        echo "已获取上游 beta 分支"
 
-    - name: Copy _worker.js from upstream
+    - name: Verify _worker.js exists in upstream beta branch
       run: |
-        # 检查上游是否有_worker.js文件
-        if git show upstream/beta:_worker.js > /dev/null 2>&1; then
-          echo "找到_worker.js文件，正在同步..."
-          git checkout upstream/beta -- _worker.js
-          echo "文件同步成功"
-          ls -la _worker.js
+        # 检查上游 beta 分支是否有 _worker.js 文件
+        if git cat-file -e upstream/beta:_worker.js 2>/dev/null; then
+          echo "_worker.js 文件存在于上游 beta 分支"
         else
-          echo "错误：上游的beta分支没有找到_worker.js文件"
+          echo "错误：上游 beta 分支没有找到 _worker.js 文件"
+          echo "尝试列出上游 beta 分支的所有文件:"
+          git ls-tree -r upstream/beta --name-only
           exit 1
         fi
+
+    - name: Copy _worker.js from upstream beta branch
+      run: |
+        # 从上游 beta 分支同步 _worker.js 文件
+        git checkout upstream/beta -- _worker.js
+        echo "已从上游 beta 分支同步 _worker.js 文件"
+        ls -la _worker.js
 
     - name: Commit and push if changed
       run: |
         # 检查文件是否有变更
-        if git diff --quiet; then
-          echo "文件无变化，无需提交"
-        else
+        if git status --porcelain | grep -q "_worker.js"; then
+          echo "检测到 _worker.js 文件有变化，准备提交"
           git add _worker.js
-          git commit -m "chore: 自动同步上游 _worker.js 文件"
+          git commit -m "chore: 从上游 beta 分支同步 _worker.js 文件"
           git push origin main
-          echo "已提交并推送更改"
+          echo "已提交并推送到 main 分支"
+        else
+          echo "文件无变化，无需提交"
         fi
