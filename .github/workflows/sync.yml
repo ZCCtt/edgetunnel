@@ -24,10 +24,7 @@ jobs:
 
     - name: Copy _worker.js from upstream
       run: |
-        # 检查文件是否存在，存在则覆盖
-        if [ -f "_worker.js" ]; then
-          echo "文件已存在，执行覆盖操作"
-        fi
+        # 无论文件是否存在，都从上游同步
         git checkout upstream/beta -- _worker.js
 
     - name: Commit and push if changed
