@@ -2,9 +2,8 @@ name: Sync Worker File from Upstream
 
 on:
   schedule:
-    # 每天 UTC 时间 00:00 运行一次（可根据需要调整）
     - cron: '0 0 * * *'
-  workflow_dispatch: # 允许手动触发
+  workflow_dispatch:
 
 jobs:
   sync-worker:
@@ -15,17 +14,41 @@ jobs:
       uses: actions/checkout@v4
       with:
         ref: main
+        fetch-depth: 0 # 获取完整历史记录
         token: ${{ secrets.GITHUB_TOKEN }}
 
+    - name: Setup Git
+      run: |
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+
+    - name: Add upstream remote
+      run: |
+        # 移除可能已存在的上游远程仓库
+        git remote remove upstream 2>/dev/null || true
+        # 添加上游仓库
+        git remote add upstream https://github.com/cmliu/edgetunnel.git
+        
     - name: Fetch upstream repository
       run: |
-        git remote add upstream https://github.com/cmliu/edgetunnel.git
-        git fetch upstream beta
+        git fetch upstream
+        echo "上游分支列表:"
+        git branch -r | grep upstream
+        echo "尝试查看上游beta分支内容:"
+        git ls-tree -r upstream/beta --name-only | head -10 || echo "无法列出beta分支内容"
 
     - name: Copy _worker.js from upstream
       run: |
-        # 无论文件是否存在，都从上游同步
-        git checkout upstream/beta -- _worker.js
+        # 检查上游是否有_worker.js文件
+        if git show upstream/beta:_worker.js > /dev/null 2>&1; then
+          echo "找到_worker.js文件，正在同步..."
+          git checkout upstream/beta -- _worker.js
+          echo "文件同步成功"
+          ls -la _worker.js
+        else
+          echo "错误：上游的beta分支没有找到_worker.js文件"
+          exit 1
+        fi
 
     - name: Commit and push if changed
       run: |
@@ -33,9 +56,8 @@ jobs:
         if git diff --quiet; then
           echo "文件无变化，无需提交"
         else
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
           git add _worker.js
           git commit -m "chore: 自动同步上游 _worker.js 文件"
           git push origin main
+          echo "已提交并推送更改"
         fi
